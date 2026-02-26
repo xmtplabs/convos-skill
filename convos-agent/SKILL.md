@@ -258,16 +258,76 @@ One JSON object per line. Must be compact (no pretty-printing).
 5. It writes the reply as compact ndjson to stdin
 6. Run the bridge script — that's all you need to do
 
+### Sub-Session Context (CRITICAL)
+
+If your bridge delegates to an AI sub-session (like `openclaw agent` or any LLM
+call), that sub-session starts with ZERO context. It doesn't know who it is, what
+conversation it's in, what commands exist, or what tools it can use. It will fail
+at anything beyond generic replies.
+
+**You MUST give the sub-session context before starting the bridge.**
+
+1. Write a context file that includes this entire skill (so the sub-session knows all commands and behavioral rules)
+2. Append runtime context: conversation ID, agent profile name, and current members
+3. The bridge reads this file and passes it as the system prompt for every AI call
+
+```bash
+# === Write context file BEFORE starting the bridge ===
+
+AGENT_NAME="Your Name"
+CONTEXT_FILE="/tmp/convos-agent-context-${CONV_ID}.md"
+
+# Get current member names
+MEMBERS=$(convos conversation profiles "$CONV_ID" --json 2>/dev/null || echo "[]")
+
+# Write the full skill as context (the main agent has it loaded — write it out)
+cat > "$CONTEXT_FILE" << 'SKILL_EOF'
+# [Paste the FULL content of this skill here]
+# The main agent has the skill loaded in context — write ALL of it.
+# Do not summarize. The sub-session needs the complete reference.
+SKILL_EOF
+
+# Append runtime context
+cat >> "$CONTEXT_FILE" << EOF
+
+---
+
+## Your Current Session
+
+- You are: $AGENT_NAME
+- Conversation ID: $CONV_ID
+- Current members: $MEMBERS
+
+## How You Respond
+
+You are inside a bridge script. Your text output becomes the message sent to
+the chat. You do NOT run shell commands — the bridge handles sending via stdin
+commands to agent serve.
+
+Keep all responses plain text. No markdown. No asterisks. No brackets.
+EOF
+```
+
+The sub-session must receive this context on EVERY call, not just the first one.
+Session-based backends (like `openclaw agent --session-id`) retain context across
+calls, but stateless backends need it passed each time.
+
 ### Generic Agent Bridge
 
-Replace the `YOUR AI LOGIC HERE` section with the agent's reply generation:
+Replace the `YOUR AI LOGIC HERE` section with the agent's reply generation.
+The bridge reads a context file (see Sub-Session Context above) to give the
+AI backend full awareness of its identity and capabilities:
 
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
 
 CONV_ID="${1:?Usage: $0 <conversation-id>}"
+CONTEXT_FILE="${2:?Usage: $0 <conversation-id> <context-file>}"
 MY_INBOX=""
+
+# Read the context file (written before starting this script)
+SYSTEM_PROMPT=$(cat "$CONTEXT_FILE")
 
 # Start agent serve as a coprocess
 coproc AGENT {
@@ -300,6 +360,8 @@ while IFS= read -r event <&"${AGENT[0]}"; do
       content=$(echo "$event" | jq -r '.content')
 
       # === YOUR AI LOGIC HERE ===
+      # Pass SYSTEM_PROMPT as context so the AI knows who it is,
+      # what conversation it's in, and what commands exist.
       reply="You said: $content"
       # === END AI LOGIC ===
 
@@ -318,14 +380,18 @@ wait "${AGENT_PID}"
 
 ### OpenClaw Bridge
 
-For agents running on OpenClaw, use `openclaw agent` for reply generation:
+For agents running on OpenClaw, use `openclaw agent` for reply generation.
+The `--system-file` flag passes the context file so the sub-session knows
+who it is and what it can do. The session ID ensures context persists across
+messages within the same conversation:
 
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
 
 CONV_ID="${1:?Usage: $0 <conversation-id>}"
-SESSION_ID="convos"
+CONTEXT_FILE="${2:?Usage: $0 <conversation-id> <context-file>}"
+SESSION_ID="convos-${CONV_ID}"
 MY_INBOX=""
 
 coproc AGENT {
@@ -353,8 +419,11 @@ while IFS= read -r event <&"${AGENT[0]}"; do
 
       content=$(echo "$event" | jq -r '.content')
 
-      # Generate reply using OpenClaw
-      reply=$(openclaw agent --session-id "$SESSION_ID" --message "$content" 2>/dev/null)
+      # Generate reply using OpenClaw with full context
+      reply=$(openclaw agent \
+        --session-id "$SESSION_ID" \
+        --system-file "$CONTEXT_FILE" \
+        --message "$content" 2>/dev/null)
 
       jq -nc --arg text "$reply" '{"type":"send","text":$text}' >&"${AGENT[1]}"
       ;;
@@ -480,6 +549,7 @@ convos conversation send-reaction "$CONV_ID" <message-id> remove "👍"
 |---------|---------------|-----------------|
 | Running `agent serve` without a conversation ID or `--name` | The command requires one or the other. It will fail with neither | Pass a conversation ID to join existing, or `--name` to create new |
 | Manually polling `agent serve` and sending messages separately | Creates race conditions, you'll miss messages between polls | Write and run a bridge script that uses coprocess stdin/stdout |
+| Calling AI sub-session without context | Sub-session doesn't know who it is, what conversation it's in, or what commands exist | Write a context file with the full skill + runtime context, pass it on every call |
 | Using markdown in messages | Convos does not render markdown. Users see raw `**asterisks**` and `[brackets](url)` | Write plain text naturally |
 | Sending via CLI while in agent mode | Agent serve owns the conversation stream. CLI sends create race conditions | Use stdin commands (`{"type":"send",...}`) in agent mode |
 | Forgetting `--env production` | Default is `dev` (test network). Real users are on production | Always pass `--env production` for real conversations |
