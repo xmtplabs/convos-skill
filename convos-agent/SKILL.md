@@ -251,12 +251,14 @@ One JSON object per line. Must be compact (no pretty-printing).
 
 ### How It Works
 
-1. Write a bridge script (use the templates below)
-2. Start `convos agent serve` as a coprocess inside it
-3. The script reads ndjson events from stdout
-4. For each text message, it generates a reply
-5. It writes the reply as compact ndjson to stdin
-6. Run the bridge script — that's all you need to do
+1. Write the bridge script to a file (use the templates below)
+2. Make it executable (`chmod +x bridge.sh`)
+3. Run it as a **separate background process** (`./bridge.sh "$CONV_ID" "$CONTEXT_FILE" &`)
+
+**The bridge MUST run as its own process.** Do not source it, run it inline, or
+execute it in the same shell as other commands. If other processes share the
+bridge's file descriptors, their output can leak into agent serve's stdin and
+get sent as chat messages (e.g., npm install output appearing in the conversation).
 
 ### Sub-Session Context (CRITICAL)
 
@@ -391,6 +393,9 @@ to the sub-session (so the agent sees when someone replies to it):
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Close inherited stdin so nothing leaks into the coprocess
+exec 0</dev/null
+
 CONV_ID="${1:?Usage: $0 <conversation-id>}"
 CONTEXT_FILE="${2:?Usage: $0 <conversation-id> <context-file>}"
 MY_INBOX=""
@@ -470,6 +475,9 @@ serve commands (react, reply with replyTo, attach, rename, etc.) as JSON:
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
+
+# Close inherited stdin so nothing leaks into the coprocess
+exec 0</dev/null
 
 CONV_ID="${1:?Usage: $0 <conversation-id>}"
 CONTEXT_FILE="${2:?Usage: $0 <conversation-id> <context-file>}"
@@ -650,7 +658,8 @@ convos conversation send-reaction "$CONV_ID" <message-id> remove "👍"
 |---------|---------------|-----------------|
 | Running `agent serve` without a conversation ID or `--name` | The command requires one or the other. It will fail with neither | Pass a conversation ID to join existing, or `--name` to create new |
 | Manually polling `agent serve` and sending messages separately | Creates race conditions, you'll miss messages between polls | Write and run a bridge script that uses coprocess stdin/stdout |
-| Calling AI sub-session without context | Sub-session doesn't know who it is, what conversation it's in, or what commands exist | Write a context file using the template in the Bridge Scripts section, prime the session on ready |
+| Calling AI sub-session without context | Sub-session doesn't know who it is, what conversation it's in, or what commands exist | Write a context file using the template in the Bridge Scripts section, send context with first message |
+| Running bridge inline or in shared shell | Output from other commands (npm install, etc.) leaks into coprocess FDs and gets sent as chat messages | Write bridge to a file, run as separate background process |
 | Using markdown in messages | Convos does not render markdown. Users see raw `**asterisks**` and `[brackets](url)` | Write plain text naturally |
 | Sending via CLI while in agent mode | Agent serve owns the conversation stream. CLI sends create race conditions | Use stdin commands (`{"type":"send",...}`) in agent mode |
 | Forgetting `--env production` | Default is `dev` (test network). Real users are on production | Always pass `--env production` for real conversations |
