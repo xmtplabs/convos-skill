@@ -366,11 +366,11 @@ CONTEXT_EOF
 
 **How to deliver context depends on your AI backend:**
 
-- **Session-based** (like `openclaw agent --session-id`): Send the context file
-  content as the FIRST message when the bridge starts. The session retains it
-  across all subsequent calls. You only pay the token cost once.
+- **Session-based** (like `openclaw agent --session-id`): Prepend the context to
+  the FIRST real message. The session retains it for all subsequent calls. Do NOT
+  prime in the `ready` handler — slow AI calls block the event loop and break
+  coprocess file descriptors.
 - **Stateless** (no session persistence): Prepend the context to every message.
-  This burns extra tokens but is the only option.
 
 ### Generic Agent Bridge
 
@@ -424,11 +424,10 @@ while IFS= read -r event <&"${AGENT[0]}"; do
       content=$(echo "$event" | jq -r '.content')
 
       # === YOUR AI LOGIC HERE ===
-      # If your backend is session-based, prime it with $SYSTEM_PROMPT
-      # on the ready event (see OpenClaw bridge for example).
-      # IMPORTANT: prime in background — blocking the event loop during
-      # a slow AI call causes coprocess FDs to go bad.
-      # If stateless, prepend $SYSTEM_PROMPT to $content on every call.
+      # If session-based: prepend $SYSTEM_PROMPT to $content on the FIRST
+      # message only (see OpenClaw bridge). Do NOT prime in the ready handler
+      # — slow AI calls block the event loop and break coprocess FDs.
+      # If stateless: prepend $SYSTEM_PROMPT to $content on every call.
       reply="You said: $content"
       # === END AI LOGIC ===
 
@@ -453,9 +452,8 @@ wait "${AGENT_PID}"
 ### OpenClaw Bridge
 
 For agents running on OpenClaw, use `openclaw agent` for reply generation.
-Since `openclaw agent --session-id` retains context across calls, send the
-context file as the **first message** to prime the session, then pass raw
-messages after that. Context is loaded once — no extra tokens per message.
+Context is sent with the first real message, then `--session-id` retains it
+for all subsequent calls — no separate prime step, no background processes.
 
 Same JSON routing as the generic bridge — the sub-session can output agent
 serve commands (react, reply with replyTo, attach, rename, etc.) as JSON:
@@ -468,12 +466,10 @@ CONV_ID="${1:?Usage: $0 <conversation-id>}"
 CONTEXT_FILE="${2:?Usage: $0 <conversation-id> <context-file>}"
 SESSION_ID="convos-${CONV_ID}"
 MY_INBOX=""
-PRIME_DONE="/tmp/.convos-primed-${CONV_ID}"
-trap 'rm -f "$PRIME_DONE"' EXIT
+CONTEXT_SENT=false
 
 # Read context once
 CONTEXT=$(cat "$CONTEXT_FILE")
-rm -f "$PRIME_DONE"
 
 coproc AGENT {
   convos agent serve "$CONV_ID" --env production --profile-name "OpenClaw Agent" 2>/dev/null
@@ -486,13 +482,6 @@ while IFS= read -r event <&"${AGENT[0]}"; do
     ready)
       MY_INBOX=$(echo "$event" | jq -r '.inboxId')
       echo "Ready: $CONV_ID" >&2
-
-      # Prime the session in background so it doesn't block the event loop.
-      # Blocking here causes the coprocess stdout buffer to fill and FDs to go bad.
-      (openclaw agent \
-        --session-id "$SESSION_ID" \
-        --message "You are now active. Here is your full context: $CONTEXT" \
-        >/dev/null 2>&1 && touch "$PRIME_DONE") &
       ;;
 
     message)
@@ -507,9 +496,10 @@ while IFS= read -r event <&"${AGENT[0]}"; do
 
       content=$(echo "$event" | jq -r '.content')
 
-      # If priming hasn't finished, prepend context to this message instead
-      if [[ ! -f "$PRIME_DONE" ]]; then
+      # First message carries context; session-id retains it for all subsequent calls
+      if [[ "$CONTEXT_SENT" != "true" ]]; then
         content="[Context] $CONTEXT [Message] $content"
+        CONTEXT_SENT=true
       fi
 
       reply=$(openclaw agent \
