@@ -267,9 +267,9 @@ at anything beyond generic replies.
 
 **You MUST give the sub-session context before starting the bridge.**
 
-1. Write a context file that includes this entire skill (so the sub-session knows all commands and behavioral rules)
+1. Write a context file by copying the FULL content of [references/sub-session-context.md](references/sub-session-context.md)
 2. Append runtime context: conversation ID, agent profile name, and current members
-3. The bridge reads this file and passes it as the system prompt for every AI call
+3. The bridge reads this file and passes it as the system prompt for AI calls
 
 ```bash
 # === Write context file BEFORE starting the bridge ===
@@ -280,12 +280,11 @@ CONTEXT_FILE="/tmp/convos-agent-context-${CONV_ID}.md"
 # Get current member names
 MEMBERS=$(convos conversation profiles "$CONV_ID" --json 2>/dev/null || echo "[]")
 
-# Write the full skill as context (the main agent has it loaded — write it out)
-cat > "$CONTEXT_FILE" << 'SKILL_EOF'
-# [Paste the FULL content of this skill here]
-# The main agent has the skill loaded in context — write ALL of it.
+# Write the sub-session context (copy FULL content of references/sub-session-context.md)
+cat > "$CONTEXT_FILE" << 'CONTEXT_EOF'
+# [Copy the FULL content of references/sub-session-context.md here]
 # Do not summarize. The sub-session needs the complete reference.
-SKILL_EOF
+CONTEXT_EOF
 
 # Append runtime context
 cat >> "$CONTEXT_FILE" << EOF
@@ -297,14 +296,6 @@ cat >> "$CONTEXT_FILE" << EOF
 - You are: $AGENT_NAME
 - Conversation ID: $CONV_ID
 - Current members: $MEMBERS
-
-## How You Respond
-
-You are inside a bridge script. Your text output becomes the message sent to
-the chat. You do NOT run shell commands — the bridge handles sending via stdin
-commands to agent serve.
-
-Keep all responses plain text. No markdown. No asterisks. No brackets.
 EOF
 ```
 
