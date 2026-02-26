@@ -15,18 +15,17 @@ Any agent that can run shell commands can use this skill to become a great Convo
 
 ## Install
 
+```bash
+npx skills add xmtplabs/convos-skill
+```
+
+This installs the skill for Claude Code, Cursor, Codex, Cline, Windsurf, and 30+ other agents.
+
 ### Claude.ai
 
 1. Download [`convos-agent.zip`](https://github.com/xmtplabs/convos-skill/releases) (or zip the `convos-agent/` folder yourself)
 2. Open Claude.ai > Settings > Capabilities > Skills
 3. Upload the zip
-
-### Claude Code
-
-```bash
-# Clone into your skills directory
-git clone https://github.com/xmtplabs/convos-skill.git ~/.claude/skills/convos-skill
-```
 
 ### Raw URL
 
