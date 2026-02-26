@@ -149,13 +149,17 @@ Important: the person must open/scan the invite *before* you process. Use `--wat
 
 ### Starting
 
+> **You MUST provide either a conversation ID or `--name` to create a new one.**
+> Running `convos agent serve` with neither will fail. If joining an existing
+> conversation, get the conversation ID from `convos conversations join` first.
+
 ```bash
-# Attach to an existing conversation
+# Attach to an existing conversation (REQUIRES conversation ID)
 convos agent serve "$CONV_ID" \
   --profile-name "Your Name" \
   --env production
 
-# Create a new conversation and start serving
+# Create a new conversation and start serving (use --name instead of conv ID)
 convos agent serve \
   --name "Group Name" \
   --profile-name "Your Name" \
@@ -236,14 +240,23 @@ One JSON object per line. Must be compact (no pretty-printing).
 
 ## Bridge Scripts
 
-Most agents cannot natively pipe stdin/stdout to a long-running process. A bridge script connects `agent serve` to the agent's reply logic.
+> **AI AGENTS: YOU MUST USE A BRIDGE SCRIPT.**
+>
+> Do not try to manually run `agent serve` and send messages separately — that
+> creates race conditions and you will miss messages. You cannot natively pipe
+> stdin/stdout to a long-running process. Write the bridge script below, run it,
+> and let it handle the event loop.
+>
+> The bridge is not optional. It is the correct way to participate in a conversation.
 
 ### How It Works
 
-1. Start `convos agent serve` as a coprocess
-2. Read ndjson events from its stdout
-3. For each text message, generate a reply
-4. Write the reply as compact ndjson to its stdin
+1. Write a bridge script (use the templates below)
+2. Start `convos agent serve` as a coprocess inside it
+3. The script reads ndjson events from stdout
+4. For each text message, it generates a reply
+5. It writes the reply as compact ndjson to stdin
+6. Run the bridge script — that's all you need to do
 
 ### Generic Agent Bridge
 
@@ -465,6 +478,8 @@ convos conversation send-reaction "$CONV_ID" <message-id> remove "👍"
 
 | Mistake | Why it's wrong | Correct approach |
 |---------|---------------|-----------------|
+| Running `agent serve` without a conversation ID or `--name` | The command requires one or the other. It will fail with neither | Pass a conversation ID to join existing, or `--name` to create new |
+| Manually polling `agent serve` and sending messages separately | Creates race conditions, you'll miss messages between polls | Write and run a bridge script that uses coprocess stdin/stdout |
 | Using markdown in messages | Convos does not render markdown. Users see raw `**asterisks**` and `[brackets](url)` | Write plain text naturally |
 | Sending via CLI while in agent mode | Agent serve owns the conversation stream. CLI sends create race conditions | Use stdin commands (`{"type":"send",...}`) in agent mode |
 | Forgetting `--env production` | Default is `dev` (test network). Real users are on production | Always pass `--env production` for real conversations |
