@@ -308,9 +308,13 @@ Keep all responses plain text. No markdown. No asterisks. No brackets.
 EOF
 ```
 
-The sub-session must receive this context on EVERY call, not just the first one.
-Session-based backends (like `openclaw agent --session-id`) retain context across
-calls, but stateless backends need it passed each time.
+**How to deliver context depends on your AI backend:**
+
+- **Session-based** (like `openclaw agent --session-id`): Send the context file
+  content as the FIRST message when the bridge starts. The session retains it
+  across all subsequent calls. You only pay the token cost once.
+- **Stateless** (no session persistence): Prepend the context to every message.
+  This burns extra tokens but is the only option.
 
 ### Generic Agent Bridge
 
@@ -360,8 +364,9 @@ while IFS= read -r event <&"${AGENT[0]}"; do
       content=$(echo "$event" | jq -r '.content')
 
       # === YOUR AI LOGIC HERE ===
-      # Pass SYSTEM_PROMPT as context so the AI knows who it is,
-      # what conversation it's in, and what commands exist.
+      # If your backend is session-based, prime it with $SYSTEM_PROMPT
+      # on the ready event (see OpenClaw bridge for example).
+      # If stateless, prepend $SYSTEM_PROMPT to $content on every call.
       reply="You said: $content"
       # === END AI LOGIC ===
 
@@ -381,9 +386,9 @@ wait "${AGENT_PID}"
 ### OpenClaw Bridge
 
 For agents running on OpenClaw, use `openclaw agent` for reply generation.
-The `--system-file` flag passes the context file so the sub-session knows
-who it is and what it can do. The session ID ensures context persists across
-messages within the same conversation:
+Since `openclaw agent --session-id` retains context across calls, send the
+context file as the **first message** to prime the session, then pass raw
+messages after that. Context is loaded once — no extra tokens per message:
 
 ```bash
 #!/usr/bin/env bash
@@ -393,6 +398,9 @@ CONV_ID="${1:?Usage: $0 <conversation-id>}"
 CONTEXT_FILE="${2:?Usage: $0 <conversation-id> <context-file>}"
 SESSION_ID="convos-${CONV_ID}"
 MY_INBOX=""
+
+# Read context once
+CONTEXT=$(cat "$CONTEXT_FILE")
 
 coproc AGENT {
   convos agent serve "$CONV_ID" --env production --profile-name "OpenClaw Agent" 2>/dev/null
@@ -405,6 +413,12 @@ while IFS= read -r event <&"${AGENT[0]}"; do
     ready)
       MY_INBOX=$(echo "$event" | jq -r '.inboxId')
       echo "Ready: $CONV_ID" >&2
+
+      # Prime the session with context (first message seeds identity + rules)
+      openclaw agent \
+        --session-id "$SESSION_ID" \
+        --message "You are now active. Here is your full context: $CONTEXT" \
+        >/dev/null 2>&1
       ;;
 
     message)
@@ -419,10 +433,9 @@ while IFS= read -r event <&"${AGENT[0]}"; do
 
       content=$(echo "$event" | jq -r '.content')
 
-      # Generate reply using OpenClaw with full context
+      # Session already has context from the prime call — just pass the message
       reply=$(openclaw agent \
         --session-id "$SESSION_ID" \
-        --system-file "$CONTEXT_FILE" \
         --message "$content" 2>/dev/null)
 
       jq -nc --arg text "$reply" '{"type":"send","text":$text}' >&"${AGENT[1]}"
