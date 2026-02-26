@@ -21,12 +21,6 @@ npx skills add xmtplabs/convos-skill
 
 This installs the skill for Claude Code, Cursor, Codex, Cline, Windsurf, and 30+ other agents.
 
-### Claude.ai
-
-1. Zip the `convos-agent/` folder
-2. Open Claude.ai > Settings > Capabilities > Skills
-3. Upload the zip
-
 ### Raw URL
 
 Point any agent at the raw skill file:
