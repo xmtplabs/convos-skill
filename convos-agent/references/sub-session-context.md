@@ -63,66 +63,67 @@ types look like in the raw stream:
 
 You only receive text messages by default. The bridge filters the rest.
 
-## Commands You Can Run
+## How You Interact with the Conversation
 
-The bridge handles sending your text replies. For everything else, use the
-`convos` CLI directly. Your conversation ID is in the runtime context below.
+You have two channels. Use the right one for each action.
 
-### Profile
+### Channel 1: Agent Serve Commands (via your output)
 
-```bash
-# Change your display name
-convos conversation update-profile "$CONV_ID" --name "New Name"
+The bridge is running `convos agent serve` as a coprocess. You cannot write to
+its stdin directly. Instead, **output a JSON command as your response** and the
+bridge will route it to agent serve. This is how you send messages, react,
+attach files, and manage the group.
 
-# Set name and avatar
-convos conversation update-profile "$CONV_ID" --name "New Name" --image "https://example.com/avatar.jpg"
+**IMPORTANT:** Never use CLI send commands (`convos conversation send-text`,
+`send-reaction`, etc.) while agent serve is running — it creates race conditions.
+Always use these JSON commands instead.
+
+To send a plain text reply, just output plain text — the bridge wraps it in a
+send command for you. For anything else, output one of these JSON objects:
+
+```jsonl
+{"type":"send","text":"Hello!"}
+{"type":"send","text":"Replying to you","replyTo":"<message-id>"}
+{"type":"react","messageId":"<message-id>","emoji":"👍"}
+{"type":"react","messageId":"<message-id>","emoji":"👍","action":"remove"}
+{"type":"attach","file":"./photo.jpg"}
+{"type":"attach","file":"./photo.jpg","replyTo":"<message-id>"}
+{"type":"rename","name":"New Group Name"}
+{"type":"lock"}
+{"type":"unlock"}
+{"type":"explode"}
+{"type":"stop"}
 ```
 
-### Reading
+The bridge detects JSON output (starts with `{`) and passes it directly to
+agent serve stdin. Plain text output gets wrapped as `{"type":"send","text":"..."}`.
+
+### Channel 2: CLI Commands (run directly)
+
+For reading data and updating your profile, use the `convos` CLI directly.
+These are safe to run alongside agent serve — they don't touch the message stream.
 
 ```bash
-# Get member profiles (names + avatars)
+# Your profile
+convos conversation update-profile "$CONV_ID" --name "New Name"
+convos conversation update-profile "$CONV_ID" --name "New Name" --image "https://url/avatar.jpg"
+
+# Read member profiles
 convos conversation profiles "$CONV_ID" --json
 
-# Get recent messages
+# Read message history
 convos conversation messages "$CONV_ID" --json --sync --limit 20
 
-# Get group info
+# Group info and permissions
 convos conversation info "$CONV_ID" --json
-```
-
-### Sending (outside the bridge)
-
-If you need to send a message directly (not through the bridge's reply mechanism):
-
-```bash
-# Send text
-convos conversation send-text "$CONV_ID" "Hello!"
-
-# React to a message
-convos conversation send-reaction "$CONV_ID" <message-id> add "👍"
-
-# Send an attachment
-convos conversation send-attachment "$CONV_ID" ./photo.jpg
-```
-
-### Group Management
-
-```bash
-# Rename the group
-convos conversation update-name "$CONV_ID" "New Name"
+convos conversation permissions "$CONV_ID" --json
 
 # Generate an invite
 convos conversation invite "$CONV_ID"
-
-# Lock/unlock the conversation
-convos conversation lock "$CONV_ID"
-convos conversation lock "$CONV_ID" --unlock
 ```
 
-Always use `--json` when parsing output programmatically. Always use
-`--env production` for real conversations (the bridge should already be
-running in production mode).
+Always use `--json` when parsing output programmatically. The bridge runs in
+production mode — your CLI commands should too (`--env production`).
 
 ## Things You Must Never Do
 

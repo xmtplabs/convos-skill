@@ -311,7 +311,11 @@ EOF
 
 Replace the `YOUR AI LOGIC HERE` section with the agent's reply generation.
 The bridge reads a context file (see Sub-Session Context above) to give the
-AI backend full awareness of its identity and capabilities:
+AI backend full awareness of its identity and capabilities.
+
+The bridge routes sub-session output: if the reply starts with `{`, it's
+passed directly to agent serve as a stdin command (react, reply, attach, etc.).
+Plain text is wrapped as a send command:
 
 ```bash
 #!/usr/bin/env bash
@@ -361,8 +365,12 @@ while IFS= read -r event <&"${AGENT[0]}"; do
       reply="You said: $content"
       # === END AI LOGIC ===
 
-      # Send reply as compact JSON
-      jq -nc --arg text "$reply" '{"type":"send","text":$text}' >&"${AGENT[1]}"
+      # Route reply: JSON commands go directly to agent serve, plain text gets wrapped
+      if [[ "$reply" == "{"* ]]; then
+        echo "$reply" >&"${AGENT[1]}"
+      else
+        jq -nc --arg text "$reply" '{"type":"send","text":$text}' >&"${AGENT[1]}"
+      fi
       ;;
 
     member_joined)
@@ -379,7 +387,10 @@ wait "${AGENT_PID}"
 For agents running on OpenClaw, use `openclaw agent` for reply generation.
 Since `openclaw agent --session-id` retains context across calls, send the
 context file as the **first message** to prime the session, then pass raw
-messages after that. Context is loaded once — no extra tokens per message:
+messages after that. Context is loaded once — no extra tokens per message.
+
+Same JSON routing as the generic bridge — the sub-session can output agent
+serve commands (react, reply with replyTo, attach, rename, etc.) as JSON:
 
 ```bash
 #!/usr/bin/env bash
@@ -429,7 +440,12 @@ while IFS= read -r event <&"${AGENT[0]}"; do
         --session-id "$SESSION_ID" \
         --message "$content" 2>/dev/null)
 
-      jq -nc --arg text "$reply" '{"type":"send","text":$text}' >&"${AGENT[1]}"
+      # Route reply: JSON commands go directly to agent serve, plain text gets wrapped
+      if [[ "$reply" == "{"* ]]; then
+        echo "$reply" >&"${AGENT[1]}"
+      else
+        jq -nc --arg text "$reply" '{"type":"send","text":$text}' >&"${AGENT[1]}"
+      fi
       ;;
 
     member_joined)
