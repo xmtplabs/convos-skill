@@ -426,6 +426,8 @@ while IFS= read -r event <&"${AGENT[0]}"; do
       # === YOUR AI LOGIC HERE ===
       # If your backend is session-based, prime it with $SYSTEM_PROMPT
       # on the ready event (see OpenClaw bridge for example).
+      # IMPORTANT: prime in background — blocking the event loop during
+      # a slow AI call causes coprocess FDs to go bad.
       # If stateless, prepend $SYSTEM_PROMPT to $content on every call.
       reply="You said: $content"
       # === END AI LOGIC ===
@@ -466,9 +468,12 @@ CONV_ID="${1:?Usage: $0 <conversation-id>}"
 CONTEXT_FILE="${2:?Usage: $0 <conversation-id> <context-file>}"
 SESSION_ID="convos-${CONV_ID}"
 MY_INBOX=""
+PRIME_DONE="/tmp/.convos-primed-${CONV_ID}"
+trap 'rm -f "$PRIME_DONE"' EXIT
 
 # Read context once
 CONTEXT=$(cat "$CONTEXT_FILE")
+rm -f "$PRIME_DONE"
 
 coproc AGENT {
   convos agent serve "$CONV_ID" --env production --profile-name "OpenClaw Agent" 2>/dev/null
@@ -482,11 +487,12 @@ while IFS= read -r event <&"${AGENT[0]}"; do
       MY_INBOX=$(echo "$event" | jq -r '.inboxId')
       echo "Ready: $CONV_ID" >&2
 
-      # Prime the session with context (first message seeds identity + rules)
-      openclaw agent \
+      # Prime the session in background so it doesn't block the event loop.
+      # Blocking here causes the coprocess stdout buffer to fill and FDs to go bad.
+      (openclaw agent \
         --session-id "$SESSION_ID" \
         --message "You are now active. Here is your full context: $CONTEXT" \
-        >/dev/null 2>&1
+        >/dev/null 2>&1 && touch "$PRIME_DONE") &
       ;;
 
     message)
@@ -501,7 +507,11 @@ while IFS= read -r event <&"${AGENT[0]}"; do
 
       content=$(echo "$event" | jq -r '.content')
 
-      # Session already has context from the prime call — just pass the message
+      # If priming hasn't finished, prepend context to this message instead
+      if [[ ! -f "$PRIME_DONE" ]]; then
+        content="[Context] $CONTEXT [Message] $content"
+      fi
+
       reply=$(openclaw agent \
         --session-id "$SESSION_ID" \
         --message "$content" 2>/dev/null)
