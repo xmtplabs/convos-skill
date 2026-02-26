@@ -23,7 +23,7 @@ This installs the skill for Claude Code, Cursor, Codex, Cline, Windsurf, and 30+
 
 ### Claude.ai
 
-1. Download [`convos-agent.zip`](https://github.com/xmtplabs/convos-skill/releases) (or zip the `convos-agent/` folder yourself)
+1. Zip the `convos-agent/` folder
 2. Open Claude.ai > Settings > Capabilities > Skills
 3. Upload the zip
 
