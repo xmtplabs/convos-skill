@@ -322,8 +322,12 @@ The bridge runs convos agent serve as a coprocess. To send messages, react,
 attach files, or manage the group, output a JSON command as your response.
 The bridge routes it to agent serve stdin.
 
-Plain text output = sent as a message automatically.
-JSON output (starts with {) = passed directly to agent serve.
+The bridge processes your output LINE BY LINE:
+- Lines starting with { = passed directly to agent serve as commands
+- Other non-empty lines = sent as text messages
+
+Output ONE thing per line. Do not mix explanatory text and JSON on the same line.
+If you need to run a command AND send a message, put them on separate lines.
 
 Available JSON commands (MUST be compact single-line ndjson):
 
@@ -378,9 +382,10 @@ Replace the `YOUR AI LOGIC HERE` section with the agent's reply generation.
 The bridge reads a context file (see Sub-Session Context above) to give the
 AI backend full awareness of its identity and capabilities.
 
-The bridge routes sub-session output: if the reply starts with `{`, it's
-passed directly to agent serve as a stdin command (react, reply, attach, etc.).
-Plain text is wrapped as a send command:
+The bridge processes sub-session output line by line: lines starting with `{`
+are passed directly to agent serve as stdin commands, other lines are sent as
+text messages. The bridge also passes both `text` and `reply` type messages
+to the sub-session (so the agent sees when someone replies to it):
 
 ```bash
 #!/usr/bin/env bash
@@ -409,9 +414,9 @@ while IFS= read -r event <&"${AGENT[0]}"; do
       ;;
 
     message)
-      # Only respond to text messages
+      # Only respond to text and reply messages
       type_id=$(echo "$event" | jq -r '.contentType.typeId // empty')
-      [[ "$type_id" != "text" ]] && continue
+      [[ "$type_id" != "text" && "$type_id" != "reply" ]] && continue
 
       # Skip catchup messages (old messages from reconnection)
       catchup=$(echo "$event" | jq -r '.catchup // false')
@@ -431,13 +436,17 @@ while IFS= read -r event <&"${AGENT[0]}"; do
       reply="You said: $content"
       # === END AI LOGIC ===
 
-      # Route reply: JSON commands go directly to agent serve, plain text gets wrapped
-      # All output MUST be compact single-line ndjson — agent serve requires it
-      if [[ "$reply" == "{"* ]]; then
-        echo "$reply" | jq -c . >&"${AGENT[1]}"
-      else
-        jq -nc --arg text "$reply" '{"type":"send","text":$text}' >&"${AGENT[1]}"
-      fi
+      # Route reply: process each line separately
+      # JSON lines (start with {) go directly to agent serve as stdin commands
+      # Non-empty text lines get wrapped as send commands
+      while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        if [[ "$line" == "{"* ]]; then
+          echo "$line" | jq -c . >&"${AGENT[1]}"
+        else
+          jq -nc --arg text "$line" '{"type":"send","text":$text}' >&"${AGENT[1]}"
+        fi
+      done <<< "$reply"
       ;;
 
     member_joined)
@@ -485,8 +494,9 @@ while IFS= read -r event <&"${AGENT[0]}"; do
       ;;
 
     message)
+      # Respond to text and reply messages (replies have typeId "reply")
       type_id=$(echo "$event" | jq -r '.contentType.typeId // empty')
-      [[ "$type_id" != "text" ]] && continue
+      [[ "$type_id" != "text" && "$type_id" != "reply" ]] && continue
 
       catchup=$(echo "$event" | jq -r '.catchup // false')
       [[ "$catchup" == "true" ]] && continue
@@ -506,13 +516,17 @@ while IFS= read -r event <&"${AGENT[0]}"; do
         --session-id "$SESSION_ID" \
         --message "$content" 2>/dev/null)
 
-      # Route reply: JSON commands go directly to agent serve, plain text gets wrapped
-      # All output MUST be compact single-line ndjson — agent serve requires it
-      if [[ "$reply" == "{"* ]]; then
-        echo "$reply" | jq -c . >&"${AGENT[1]}"
-      else
-        jq -nc --arg text "$reply" '{"type":"send","text":$text}' >&"${AGENT[1]}"
-      fi
+      # Route reply: process each line separately
+      # JSON lines (start with {) go directly to agent serve as stdin commands
+      # Non-empty text lines get wrapped as send commands
+      while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        if [[ "$line" == "{"* ]]; then
+          echo "$line" | jq -c . >&"${AGENT[1]}"
+        else
+          jq -nc --arg text "$line" '{"type":"send","text":$text}' >&"${AGENT[1]}"
+        fi
+      done <<< "$reply"
       ;;
 
     member_joined)
