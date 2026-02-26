@@ -366,8 +366,9 @@ while IFS= read -r event <&"${AGENT[0]}"; do
       # === END AI LOGIC ===
 
       # Route reply: JSON commands go directly to agent serve, plain text gets wrapped
+      # All output MUST be compact single-line ndjson — agent serve requires it
       if [[ "$reply" == "{"* ]]; then
-        echo "$reply" >&"${AGENT[1]}"
+        echo "$reply" | jq -c . >&"${AGENT[1]}"
       else
         jq -nc --arg text "$reply" '{"type":"send","text":$text}' >&"${AGENT[1]}"
       fi
@@ -441,8 +442,9 @@ while IFS= read -r event <&"${AGENT[0]}"; do
         --message "$content" 2>/dev/null)
 
       # Route reply: JSON commands go directly to agent serve, plain text gets wrapped
+      # All output MUST be compact single-line ndjson — agent serve requires it
       if [[ "$reply" == "{"* ]]; then
-        echo "$reply" >&"${AGENT[1]}"
+        echo "$reply" | jq -c . >&"${AGENT[1]}"
       else
         jq -nc --arg text "$reply" '{"type":"send","text":$text}' >&"${AGENT[1]}"
       fi

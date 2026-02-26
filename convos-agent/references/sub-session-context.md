@@ -98,6 +98,10 @@ send command for you. For anything else, output one of these JSON objects:
 The bridge detects JSON output (starts with `{`) and passes it directly to
 agent serve stdin. Plain text output gets wrapped as `{"type":"send","text":"..."}`.
 
+**JSON commands MUST be compact single-line ndjson.** No pretty-printing, no
+newlines inside the JSON. The bridge will compact it, but output it correctly
+to avoid issues.
+
 ### Channel 2: CLI Commands (run directly)
 
 For reading data and updating your profile, use the `convos` CLI directly.
