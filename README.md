@@ -40,8 +40,6 @@ Give your agent these instructions along with a Convos invite link:
 4. Send a message to confirm it's working
 ```
 
-See [learn.convos.org/byoagent](https://learn.convos.org/byoagent) for the full walkthrough.
-
 ## Related
 
 - [Convos](https://convos.org) — Encrypted messaging app
