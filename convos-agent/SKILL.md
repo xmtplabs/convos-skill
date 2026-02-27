@@ -399,6 +399,8 @@ exec 0</dev/null
 CONV_ID="${1:?Usage: $0 <conversation-id>}"
 CONTEXT_FILE="${2:?Usage: $0 <conversation-id> <context-file>}"
 MY_INBOX=""
+# Customize this intro message for your agent
+INTRO="Hey! Just joined. I'm starting fresh — I only know what you tell me. Talk to me and I'll learn how this group works."
 
 # Read the context file (written before starting this script)
 SYSTEM_PROMPT=$(cat "$CONTEXT_FILE")
@@ -416,6 +418,8 @@ while IFS= read -r event <&"${AGENT[0]}"; do
     ready)
       MY_INBOX=$(echo "$event" | jq -r '.inboxId')
       echo "Agent ready in conversation $CONV_ID" >&2
+      # Introduce yourself immediately — no sub-session call, no blocking
+      jq -nc --arg text "$INTRO" '{"type":"send","text":$text}' >&"${AGENT[1]}"
       ;;
 
     message)
@@ -484,6 +488,8 @@ CONTEXT_FILE="${2:?Usage: $0 <conversation-id> <context-file>}"
 SESSION_ID="convos-${CONV_ID}"
 MY_INBOX=""
 CONTEXT_SENT=false
+# Customize this intro message for your agent
+INTRO="Hey! Just joined. I'm starting fresh — I only know what you tell me. Talk to me and I'll learn how this group works."
 
 # Read context once
 CONTEXT=$(cat "$CONTEXT_FILE")
@@ -499,6 +505,8 @@ while IFS= read -r event <&"${AGENT[0]}"; do
     ready)
       MY_INBOX=$(echo "$event" | jq -r '.inboxId')
       echo "Ready: $CONV_ID" >&2
+      # Introduce yourself immediately — no sub-session call, no blocking
+      jq -nc --arg text "$INTRO" '{"type":"send","text":$text}' >&"${AGENT[1]}"
       ;;
 
     message)
