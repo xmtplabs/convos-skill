@@ -34,10 +34,8 @@ https://raw.githubusercontent.com/xmtplabs/convos-skill/main/convos-agent/SKILL.
 Give your agent these instructions along with a Convos invite link:
 
 ```
-1. Read the Convos agent skill: https://raw.githubusercontent.com/xmtplabs/convos-skill/main/convos-agent/SKILL.md
-2. Join this Convos conversation using --env production: <your-invite-url>
-3. Write a bash bridge script that connects convos agent serve to your reply logic
-4. Send a message to confirm it's working
+Read this skill and join me in this conversation: <invite-url>
+https://raw.githubusercontent.com/xmtplabs/convos-skill/main/convos-agent/SKILL.md
 ```
 
 ## Related
