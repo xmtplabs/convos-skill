@@ -393,23 +393,41 @@ to the sub-session (so the agent sees when someone replies to it):
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Close inherited stdin so nothing leaks into the coprocess
-exec 0</dev/null
-
 CONV_ID="${1:?Usage: $0 <conversation-id>}"
 CONTEXT_FILE="${2:?Usage: $0 <conversation-id> <context-file>}"
 MY_INBOX=""
 
-# Read the context file (written before starting this script)
 SYSTEM_PROMPT=$(cat "$CONTEXT_FILE")
 
-# Start agent serve as a coprocess
-coproc AGENT {
-  convos agent serve "$CONV_ID" --env production --profile-name "My Agent" 2>/dev/null
+# Named pipes — more stable than coprocess FDs
+FIFO_DIR=$(mktemp -d)
+FIFO_IN="$FIFO_DIR/in"
+FIFO_OUT="$FIFO_DIR/out"
+mkfifo "$FIFO_IN" "$FIFO_OUT"
+trap 'rm -rf "$FIFO_DIR"' EXIT
+
+# Start agent serve with named pipes
+convos agent serve "$CONV_ID" --env production --profile-name "My Agent" \
+  < "$FIFO_IN" > "$FIFO_OUT" 2>/dev/null &
+AGENT_PID=$!
+
+# Persistent write FD — stays open for the lifetime of the script
+exec 3>"$FIFO_IN"
+
+# Route a reply to agent serve: JSON commands pass through, text gets wrapped
+route_reply() {
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    if [[ "$line" == "{"* ]]; then
+      echo "$line" | jq -c . >&3
+    else
+      jq -nc --arg text "$line" '{"type":"send","text":$text}' >&3
+    fi
+  done <<< "$1"
 }
 
 # Read events
-while IFS= read -r event <&"${AGENT[0]}"; do
+while IFS= read -r event; do
   evt=$(echo "$event" | jq -r '.event // empty')
 
   case "$evt" in
@@ -418,19 +436,16 @@ while IFS= read -r event <&"${AGENT[0]}"; do
       echo "Agent ready in conversation $CONV_ID" >&2
       # === GENERATE INTRO IN BACKGROUND ===
       # Call your AI backend with $SYSTEM_PROMPT + "introduce yourself"
-      # and route the reply to >&"${AGENT[1]}" (see OpenClaw bridge)
+      # and route the reply: route_reply "$reply" (see OpenClaw bridge)
       ;;
 
     message)
-      # Only respond to text and reply messages
       type_id=$(echo "$event" | jq -r '.contentType.typeId // empty')
       [[ "$type_id" != "text" && "$type_id" != "reply" ]] && continue
 
-      # Skip catchup messages (old messages from reconnection)
       catchup=$(echo "$event" | jq -r '.catchup // false')
       [[ "$catchup" == "true" ]] && continue
 
-      # Skip own messages
       sender=$(echo "$event" | jq -r '.senderInboxId // empty')
       [[ "$sender" == "$MY_INBOX" ]] && continue
 
@@ -438,32 +453,21 @@ while IFS= read -r event <&"${AGENT[0]}"; do
 
       # === YOUR AI LOGIC HERE ===
       # If session-based: prepend $SYSTEM_PROMPT to $content on the FIRST
-      # message only (see OpenClaw bridge). Do NOT prime in the ready handler
-      # — slow AI calls block the event loop and break coprocess FDs.
+      # message only (see OpenClaw bridge).
       # If stateless: prepend $SYSTEM_PROMPT to $content on every call.
       reply="You said: $content"
       # === END AI LOGIC ===
 
-      # Route reply: process each line separately
-      # JSON lines (start with {) go directly to agent serve as stdin commands
-      # Non-empty text lines get wrapped as send commands
-      while IFS= read -r line; do
-        [[ -z "$line" ]] && continue
-        if [[ "$line" == "{"* ]]; then
-          echo "$line" | jq -c . >&"${AGENT[1]}"
-        else
-          jq -nc --arg text "$line" '{"type":"send","text":$text}' >&"${AGENT[1]}"
-        fi
-      done <<< "$reply"
+      route_reply "$reply"
       ;;
 
     member_joined)
-      jq -nc '{"type":"send","text":"Welcome!"}' >&"${AGENT[1]}"
+      jq -nc '{"type":"send","text":"Welcome!"}' >&3
       ;;
   esac
-done
+done < "$FIFO_OUT"
 
-wait "${AGENT_PID}"
+wait "$AGENT_PID"
 ```
 
 ### OpenClaw Bridge
@@ -479,7 +483,7 @@ serve commands (react, reply with replyTo, attach, rename, etc.) as JSON:
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Close inherited stdin so nothing leaks into the coprocess
+# Close inherited stdin so nothing leaks into agent serve
 exec 0</dev/null
 
 CONV_ID="${1:?Usage: $0 <conversation-id>}"
@@ -491,11 +495,34 @@ CONTEXT_SENT=false
 # Read context once
 CONTEXT=$(cat "$CONTEXT_FILE")
 
-coproc AGENT {
-  convos agent serve "$CONV_ID" --env production --profile-name "OpenClaw Agent" 2>/dev/null
+# Named pipes — more stable than coprocess FDs
+FIFO_DIR=$(mktemp -d)
+FIFO_IN="$FIFO_DIR/in"
+FIFO_OUT="$FIFO_DIR/out"
+mkfifo "$FIFO_IN" "$FIFO_OUT"
+trap 'rm -rf "$FIFO_DIR"' EXIT
+
+# Start agent serve with named pipes
+convos agent serve "$CONV_ID" --env production --profile-name "OpenClaw Agent" \
+  < "$FIFO_IN" > "$FIFO_OUT" 2>/dev/null &
+AGENT_PID=$!
+
+# Persistent write FD — stays open for the lifetime of the script
+exec 3>"$FIFO_IN"
+
+# Route a reply to agent serve: JSON commands pass through, text gets wrapped
+route_reply() {
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    if [[ "$line" == "{"* ]]; then
+      echo "$line" | jq -c . >&3
+    else
+      jq -nc --arg text "$line" '{"type":"send","text":$text}' >&3
+    fi
+  done <<< "$1"
 }
 
-while IFS= read -r event <&"${AGENT[0]}"; do
+while IFS= read -r event; do
   evt=$(echo "$event" | jq -r '.event // empty')
 
   case "$evt" in
@@ -509,14 +536,7 @@ while IFS= read -r event <&"${AGENT[0]}"; do
           --session-id "$SESSION_ID" \
           --message "[Context] $CONTEXT [Message] You just joined this conversation. Introduce yourself." \
           2>/dev/null)
-        while IFS= read -r line; do
-          [[ -z "$line" ]] && continue
-          if [[ "$line" == "{"* ]]; then
-            echo "$line" | jq -c . >&"${AGENT[1]}"
-          else
-            jq -nc --arg text "$line" '{"type":"send","text":$text}' >&"${AGENT[1]}"
-          fi
-        done <<< "$reply"
+        route_reply "$reply"
       } &
       ;;
 
@@ -543,26 +563,16 @@ while IFS= read -r event <&"${AGENT[0]}"; do
         --session-id "$SESSION_ID" \
         --message "$content" 2>/dev/null)
 
-      # Route reply: process each line separately
-      # JSON lines (start with {) go directly to agent serve as stdin commands
-      # Non-empty text lines get wrapped as send commands
-      while IFS= read -r line; do
-        [[ -z "$line" ]] && continue
-        if [[ "$line" == "{"* ]]; then
-          echo "$line" | jq -c . >&"${AGENT[1]}"
-        else
-          jq -nc --arg text "$line" '{"type":"send","text":$text}' >&"${AGENT[1]}"
-        fi
-      done <<< "$reply"
+      route_reply "$reply"
       ;;
 
     member_joined)
-      jq -nc '{"type":"send","text":"Welcome!"}' >&"${AGENT[1]}"
+      jq -nc '{"type":"send","text":"Welcome!"}' >&3
       ;;
   esac
-done
+done < "$FIFO_OUT"
 
-wait "${AGENT_PID}"
+wait "$AGENT_PID"
 ```
 
 ## In-Conversation CLI Reference
