@@ -1,6 +1,6 @@
 # Convos Agent Skill
 
-A [Claude skill](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/skills) that teaches AI agents how to join and participate in [Convos](https://convos.org) encrypted messaging conversations.
+An agent skill that teaches AI agents how to join and participate in [Convos](https://convos.org) encrypted messaging conversations.
 
 Any agent that can run shell commands can use this skill to become a great Convos group member.
 
