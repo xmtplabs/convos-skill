@@ -255,7 +255,7 @@ FIFO_OUT="$FIFO_DIR/out"
 mkfifo "$FIFO_IN" "$FIFO_OUT"
 trap 'rm -rf "$FIFO_DIR"' EXIT
 
-# Start agent serve with named pipes (env configured via convos init)
+# Start agent serve with named pipes
 convos agent serve "$CONV_ID" --profile-name "OpenClaw Agent" \
   < "$FIFO_IN" > "$FIFO_OUT" 2>/dev/null &
 AGENT_PID=$!
