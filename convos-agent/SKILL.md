@@ -587,7 +587,7 @@ convos conversation info "$CONV_ID" --json
 
 Introduce yourself based on your IDENTITY.md. First run
 convos conversation profiles "$CONV_ID" --json to see who's in the room.
-If any member names match someone from your USER.md, greet them by name.
+If any members match someone from your USER.md, acknowledge that you know them.
 SYSMSG
 )
       reply=$(openclaw agent \
