@@ -434,9 +434,6 @@ while IFS= read -r event; do
     ready)
       MY_INBOX=$(echo "$event" | jq -r '.inboxId')
       echo "Agent ready in conversation $CONV_ID" >&2
-      # === GENERATE INTRO IN BACKGROUND ===
-      # Call your AI backend with $SYSTEM_PROMPT + "introduce yourself"
-      # and route the reply: route_reply "$reply" (see OpenClaw bridge)
       ;;
 
     message)
@@ -529,15 +526,6 @@ while IFS= read -r event; do
     ready)
       MY_INBOX=$(echo "$event" | jq -r '.inboxId')
       echo "Ready: $CONV_ID" >&2
-      # Generate intro in background so it doesn't block the event loop
-      CONTEXT_SENT=true
-      {
-        reply=$(openclaw agent \
-          --session-id "$SESSION_ID" \
-          --message "[Context] $CONTEXT [Message] You just joined this conversation. Introduce yourself." \
-          2>/dev/null)
-        route_reply "$reply"
-      } &
       ;;
 
     message)
