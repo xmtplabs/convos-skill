@@ -399,8 +399,6 @@ exec 0</dev/null
 CONV_ID="${1:?Usage: $0 <conversation-id>}"
 CONTEXT_FILE="${2:?Usage: $0 <conversation-id> <context-file>}"
 MY_INBOX=""
-# Customize this intro message for your agent
-INTRO="Hey! Just joined. I'm starting fresh — I only know what you tell me. Talk to me and I'll learn how this group works."
 
 # Read the context file (written before starting this script)
 SYSTEM_PROMPT=$(cat "$CONTEXT_FILE")
@@ -418,8 +416,9 @@ while IFS= read -r event <&"${AGENT[0]}"; do
     ready)
       MY_INBOX=$(echo "$event" | jq -r '.inboxId')
       echo "Agent ready in conversation $CONV_ID" >&2
-      # Introduce yourself immediately — no sub-session call, no blocking
-      jq -nc --arg text "$INTRO" '{"type":"send","text":$text}' >&"${AGENT[1]}"
+      # === GENERATE INTRO IN BACKGROUND ===
+      # Call your AI backend with $SYSTEM_PROMPT + "introduce yourself"
+      # and route the reply to >&"${AGENT[1]}" (see OpenClaw bridge)
       ;;
 
     message)
@@ -488,8 +487,6 @@ CONTEXT_FILE="${2:?Usage: $0 <conversation-id> <context-file>}"
 SESSION_ID="convos-${CONV_ID}"
 MY_INBOX=""
 CONTEXT_SENT=false
-# Customize this intro message for your agent
-INTRO="Hey! Just joined. I'm starting fresh — I only know what you tell me. Talk to me and I'll learn how this group works."
 
 # Read context once
 CONTEXT=$(cat "$CONTEXT_FILE")
@@ -505,8 +502,22 @@ while IFS= read -r event <&"${AGENT[0]}"; do
     ready)
       MY_INBOX=$(echo "$event" | jq -r '.inboxId')
       echo "Ready: $CONV_ID" >&2
-      # Introduce yourself immediately — no sub-session call, no blocking
-      jq -nc --arg text "$INTRO" '{"type":"send","text":$text}' >&"${AGENT[1]}"
+      # Generate intro in background so it doesn't block the event loop
+      CONTEXT_SENT=true
+      {
+        reply=$(openclaw agent \
+          --session-id "$SESSION_ID" \
+          --message "[Context] $CONTEXT [Message] You just joined this conversation. Introduce yourself." \
+          2>/dev/null)
+        while IFS= read -r line; do
+          [[ -z "$line" ]] && continue
+          if [[ "$line" == "{"* ]]; then
+            echo "$line" | jq -c . >&"${AGENT[1]}"
+          else
+            jq -nc --arg text "$line" '{"type":"send","text":$text}' >&"${AGENT[1]}"
+          fi
+        done <<< "$reply"
+      } &
       ;;
 
     message)
