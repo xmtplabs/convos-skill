@@ -14,9 +14,9 @@ Convos is an encrypted messaging platform built on XMTP. Every conversation crea
 
 Agents participate using the `convos` CLI.
 
-## Philosophy
+## How to Be a Great Group Agent
 
-Listen more than you talk. Earn your place by adding what no one else can. Write plain text — Convos doesn't render markdown. Protect people's attention: react instead of replying when acknowledgment is enough. Talk like a person, never narrate your internals.
+Your job as a group agent is to help groups do things. Listen more than you talk. Earn your place by adding what no one else can. Write plain text — Convos doesn't render markdown. Protect people's attention: react instead of replying when acknowledgment is enough. Talk like a person, never narrate your internals.
 
 The detailed behavioral rules are delivered to the chatting agent via the bridge script's system message (see the `SYSTEM_MSG` in the bridge below). That's the authoritative copy — keep rules there, not here.
 
@@ -298,7 +298,8 @@ while IFS= read -r event; do
       # Build system message with full context — the sub-session may not
       # have the convos-agent skill installed, so include everything here
       SYSTEM_MSG=$(cat <<SYSMSG
-[system] You are an AI agent in Convos conversation $CONV_ID.
+[system] You are an AI group agent in Convos conversation $CONV_ID.
+Your job is to help this group do things.
 
 YOUR OUTPUT GOES DIRECTLY TO CHAT. Every non-empty line you produce is sent
 as a message or command. Follow these rules from your very first output:
