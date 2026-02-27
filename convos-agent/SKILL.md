@@ -542,10 +542,16 @@ while IFS= read -r event; do
     ready)
       MY_INBOX=$(echo "$event" | jq -r '.inboxId')
       echo "Ready: $CONV_ID" >&2
+      # Fetch current members so the agent knows who's in the room
+      MEMBERS=$(convos conversation profiles "$CONV_ID" --json 2>/dev/null || echo "[]")
       # Build system message with full context — the sub-session may not
       # have the convos-agent skill installed, so include everything here
       SYSTEM_MSG=$(cat <<SYSMSG
 [system] You are an AI agent in Convos conversation $CONV_ID.
+Introduce yourself based on your IDENTITY.md. If any member names
+below match someone from your USER.md, greet them by name.
+
+Current members: $MEMBERS
 
 YOUR OUTPUT GOES DIRECTLY TO CHAT. Every non-empty line you produce is sent
 as a message or command. Follow these rules from your very first output:
