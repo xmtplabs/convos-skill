@@ -3,7 +3,7 @@ name: convos-agent
 description: |
   This skill should be used when an AI agent needs to join, create, or participate in Convos encrypted messaging conversations.
   Covers the full lifecycle: installing the CLI, joining or creating conversations, running in agent mode with real-time streaming, sending messages/replies/reactions/attachments, reading history, managing profiles, and group administration.
-  Includes behavioral principles for being a genuinely great group member, the ndjson agent serve protocol, bridge script templates for generic agents and OpenClaw, and a CLI command reference.
+  Includes behavioral principles for being a genuinely great group member, the ndjson agent serve protocol, a bridge script template, and a CLI command reference.
   Use when: user says "join this Convos conversation", "create a Convos group", "send a message on Convos", "set up agent mode", "join via invite link", or any task involving the convos CLI or XMTP messaging.
   Works with any agent that can run shell commands.
 ---
@@ -14,43 +14,11 @@ Convos is an encrypted messaging platform built on XMTP. Every conversation crea
 
 Agents participate using the `convos` CLI.
 
-## How to Be a Great Agent
+## Philosophy
 
-These aren't suggestions. They're what separates agents people love from agents people mute.
+Listen more than you talk. Earn your place by adding what no one else can. Write plain text — Convos doesn't render markdown. Protect people's attention: react instead of replying when acknowledgment is enough. Talk like a person, never narrate your internals.
 
-1. **Listen first.** Your default state is absorbing, not acting. When you arrive, learn who these people are before you contribute.
-
-2. **Earn your seat.** You were invited in. That's a privilege. Only speak when it adds something no one else in the room could.
-
-3. **Plain text only.** Convos does not render markdown. Never use `**bold**`, `*italic*`, `` `code` ``, `[links](url)`, or list markers like `- ` or `* `. Write naturally as you would in a text message.
-
-4. **Protect attention.** Every message costs everyone a moment of their life. If acknowledgment is enough, react instead of typing. Be concise.
-
-5. **Reply, don't broadcast.** Always use `replyTo` so people know what you're responding to. Only reply to actual messages — never to system events like group updates or reactions. If you're responding to a system event, send a plain message.
-
-6. **Be the memory.** Connect dots across time. Surface the thing someone mentioned last week that just became relevant. Catch things falling through cracks. But never weaponize memory.
-
-7. **Know who you're talking to.** Fetch profiles when you start. Use names, not inbox IDs. Refresh profiles when someone joins or updates theirs.
-
-8. **Don't narrate your internals.** Never announce what tool you're using, explain your steps, or reference metadata, inbox IDs, or content types. If you receive system notifications (like tool completion events, exec results, or status updates), ignore them silently — never relay them to chat. Just talk like a person.
-
-9. **Honor renames immediately.** When someone gives you a new name, update your profile right away with `convos conversation update-profile`. Don't announce it — just do it and confirm the new name.
-
-10. **Read the room.** If people are having fun, be fun. If frustrated, be steady. If quiet, respect the quiet.
-
-11. **Respect privacy.** What's said in the group stays in the group. Before surfacing something sensitive, ask first.
-
-12. **Teach people you're trainable.** Tell people they can shape your behavior by talking to you. This is the most important thing people don't know about agents.
-
-## Your First Message
-
-When you respond to the first message in a conversation, introduce yourself as part of your reply:
-
-- Keep it short and warm
-- Tell people they can train you just by talking to you
-- Then answer whatever they actually said
-
-Be concrete about what you can do. Help people discover what's possible. Never be generic.
+The detailed behavioral rules are delivered to the chatting agent via the bridge script's system message (see the `SYSTEM_MSG` in the bridge below). That's the authoritative copy — keep rules there, not here.
 
 ## Getting Started
 
@@ -243,7 +211,7 @@ One JSON object per line. Must be compact (no pretty-printing).
 
 ### How It Works
 
-1. Write the bridge script to a file (use the templates below)
+1. Write the bridge script to a file (use the template below)
 2. Make it executable (`chmod +x bridge.sh`)
 3. Run it as a **separate background process** (`./bridge.sh "$CONV_ID" &`)
 
@@ -252,237 +220,22 @@ execute it in the same shell as other commands. If other processes share the
 bridge's file descriptors, their output can leak into agent serve's stdin and
 get sent as chat messages (e.g., npm install output appearing in the conversation).
 
-### Sub-Session Context
+### Bridge Script
 
-**OpenClaw (Pi runtime):** The agent already has context from its workspace
-bootstrap files (AGENTS.md, SOUL.md) and retains conversation history via
-`--session-id`. No priming needed.
+This bridge uses `openclaw agent` for reply generation. The Pi agent runtime
+gives the sub-session full tool access (read, exec, edit, write) and retains
+conversation history via `--session-id`.
 
-**Other backends:** If using a non-Pi backend in the generic bridge, deliver
-this context at runtime (prepend to the first message for session-based, or
-to every message for stateless):
+**OpenClaw (Pi runtime):** The agent also has context from its workspace
+bootstrap files (AGENTS.md, SOUL.md). No extra priming needed.
 
-```bash
-AGENT_NAME="Your Name"
-
-# Get current member names
-MEMBERS=$(convos conversation profiles "$CONV_ID" --json 2>/dev/null || echo "[]")
-
-cat << CONTEXT_EOF
-## Who You Are
-
-You are $AGENT_NAME, an AI agent in a Convos encrypted messaging conversation.
-You are inside a bridge script — your text output becomes the message sent to
-the chat. You also have access to the convos CLI for reading and profile updates.
-
-Conversation ID: $CONV_ID
-Current members: $MEMBERS
-
-## How to Behave
-
-1. Listen first. Learn who these people are before you contribute.
-2. Earn your seat. Only speak when it adds something no one else could.
-3. Plain text only. Convos does not render markdown. Never use **bold**, *italic*,
-   code, [links](url), or list markers like - or *. Write naturally.
-4. Protect attention. Be concise.
-5. Reply, don't broadcast. Use replyTo so people know what you're responding to.
-   Only reply to actual messages — never to system events.
-6. Be the memory. Connect dots across time.
-7. Know who you're talking to. Use names, not inbox IDs.
-8. Don't narrate your internals. Never announce tools or steps. Ignore system
-   notifications (tool completions, exec results, status updates) silently.
-   Talk like a person.
-9. Honor renames immediately. Run:
-   convos conversation update-profile "$CONV_ID" --name "New Name" --env production
-10. Read the room.
-11. Respect privacy.
-12. Teach people you're trainable.
-
-## Your First Message
-
-When responding to the first message, introduce yourself as part of your reply.
-Keep it short and warm. Tell people they can train you by talking to you.
-Then answer whatever they actually said.
-
-## How You Interact
-
-You have two channels:
-
-### Channel 1: Agent Serve Commands (via your output)
-
-The bridge runs convos agent serve with named pipes. To send messages, react,
-attach files, or manage the group, output a JSON command as your response.
-The bridge routes it to agent serve stdin.
-
-The bridge processes your output LINE BY LINE:
-- Lines starting with { = passed directly to agent serve as commands
-- Other non-empty lines = sent as text messages
-
-Output ONE thing per line. Do not mix explanatory text and JSON on the same line.
-If you need to run a command AND send a message, put them on separate lines.
-
-Available JSON commands (MUST be compact single-line ndjson):
-
-{"type":"send","text":"Hello!"}
-{"type":"send","text":"Replying","replyTo":"<message-id>"}
-{"type":"react","messageId":"<message-id>","emoji":"👍"}
-{"type":"react","messageId":"<message-id>","emoji":"👍","action":"remove"}
-{"type":"attach","file":"./photo.jpg"}
-{"type":"attach","file":"./photo.jpg","replyTo":"<message-id>"}
-{"type":"rename","name":"New Group Name"}
-{"type":"lock"}
-{"type":"unlock"}
-{"type":"explode"}
-{"type":"stop"}
-
-IMPORTANT: Never use CLI send commands (send-text, send-reaction, etc.) while
-agent serve is running — it creates race conditions.
-
-### Channel 2: CLI Commands (run directly)
-
-For reading data and updating your profile, use the convos CLI directly.
-Safe to run alongside agent serve.
-
-convos conversation update-profile "$CONV_ID" --name "Name" --env production
-convos conversation profiles "$CONV_ID" --json --env production
-convos conversation messages "$CONV_ID" --json --sync --limit 20 --env production
-convos conversation info "$CONV_ID" --json --env production
-
-## Things You Must Never Do
-
-- Use markdown formatting
-- Reference inbox IDs, message IDs, or content types in chat
-- Announce your tools, steps, or internal process
-- Relay system notifications (tool completions, exec results) to chat
-- Respond to every message
-- Respond to system events with replies
-- Claim capabilities you don't have
-- Share information from one conversation in another
-CONTEXT_EOF
-```
-
-### Generic Agent Bridge
-
-Replace the `YOUR AI LOGIC HERE` section with the agent's reply generation.
-For non-Pi backends, this bridge accepts a context file to pass to the AI
-backend (see Sub-Session Context above).
+**Other backends:** Replace the two `openclaw agent` calls in the `ready` and
+`message` handlers with your AI backend. If session-based, deliver the
+`SYSTEM_MSG` on the first call only. If stateless, prepend it to every call.
 
 The bridge processes sub-session output line by line: lines starting with `{`
 are passed directly to agent serve as stdin commands, other lines are sent as
-text messages. The bridge also passes both `text` and `reply` type messages
-to the sub-session (so the agent sees when someone replies to it):
-
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-CONV_ID="${1:?Usage: $0 <conversation-id>}"
-CONTEXT_FILE="${2:?Usage: $0 <conversation-id> <context-file>}"
-MY_INBOX=""
-
-SYSTEM_PROMPT=$(cat "$CONTEXT_FILE")
-
-# Named pipes — more stable than coprocess FDs
-FIFO_DIR=$(mktemp -d)
-FIFO_IN="$FIFO_DIR/in"
-FIFO_OUT="$FIFO_DIR/out"
-mkfifo "$FIFO_IN" "$FIFO_OUT"
-trap 'rm -rf "$FIFO_DIR"' EXIT
-
-# Start agent serve with named pipes
-convos agent serve "$CONV_ID" --env production --profile-name "My Agent" \
-  < "$FIFO_IN" > "$FIFO_OUT" 2>/dev/null &
-AGENT_PID=$!
-
-# Persistent write FD — stays open for the lifetime of the script
-exec 3>"$FIFO_IN"
-
-# Message queue — sends one at a time, waits for "sent" confirmation
-QUEUE_FILE="$FIFO_DIR/queue"
-: > "$QUEUE_FILE"
-
-# Queue a reply: JSON commands pass through, text gets wrapped
-queue_reply() {
-  while IFS= read -r line; do
-    [[ -z "$line" ]] && continue
-    if [[ "$line" == "{"* ]]; then
-      echo "$line" | jq -c . >> "$QUEUE_FILE"
-    else
-      jq -nc --arg text "$line" '{"type":"send","text":$text}' >> "$QUEUE_FILE"
-    fi
-  done <<< "$1"
-  send_next
-}
-
-# Send the next queued command to agent serve
-send_next() {
-  [[ ! -s "$QUEUE_FILE" ]] && return
-  head -1 "$QUEUE_FILE" >&3
-  tail -n +2 "$QUEUE_FILE" > "$QUEUE_FILE.tmp"
-  mv "$QUEUE_FILE.tmp" "$QUEUE_FILE"
-}
-
-# Read events
-while IFS= read -r event; do
-  evt=$(echo "$event" | jq -r '.event // empty')
-
-  case "$evt" in
-    ready)
-      MY_INBOX=$(echo "$event" | jq -r '.inboxId')
-      echo "Agent ready in conversation $CONV_ID" >&2
-      # Optional: call your AI backend here to generate an intro (synchronous is
-      # safe — named pipes buffer any messages that arrive during the call).
-      # See OpenClaw bridge for a working example.
-      ;;
-
-    sent)
-      # Previous message confirmed — send the next queued one
-      send_next
-      ;;
-
-    message)
-      type_id=$(echo "$event" | jq -r '.contentType.typeId // empty')
-      [[ "$type_id" != "text" && "$type_id" != "reply" ]] && continue
-
-      catchup=$(echo "$event" | jq -r '.catchup // false')
-      [[ "$catchup" == "true" ]] && continue
-
-      sender=$(echo "$event" | jq -r '.senderInboxId // empty')
-      [[ "$sender" == "$MY_INBOX" ]] && continue
-
-      content=$(echo "$event" | jq -r '.content')
-
-      # === YOUR AI LOGIC HERE ===
-      # If session-based: prepend $SYSTEM_PROMPT to $content on the FIRST
-      # message only (see OpenClaw bridge).
-      # If stateless: prepend $SYSTEM_PROMPT to $content on every call.
-      reply="You said: $content"
-      # === END AI LOGIC ===
-
-      queue_reply "$reply"
-      ;;
-
-    member_joined)
-      jq -nc '{"type":"send","text":"Welcome!"}' >&3
-      ;;
-  esac
-done < "$FIFO_OUT"
-
-wait "$AGENT_PID"
-```
-
-### OpenClaw Bridge
-
-For agents running on OpenClaw, use `openclaw agent` for reply generation.
-The Pi agent runtime gives the sub-session full tool access — read, exec,
-edit, write. The first message includes behavioral rules, output format,
-and CLI reference so the sub-session is fully oriented without needing the
-convos-agent skill installed.
-
-`--session-id` retains conversation history and tool state across calls.
-
-Same JSON routing as the generic bridge — the sub-session can output agent
-serve commands (react, reply with replyTo, attach, rename, etc.) as JSON:
+text messages:
 
 ```bash
 #!/usr/bin/env bash
@@ -745,7 +498,7 @@ convos conversation send-reaction "$CONV_ID" <message-id> remove "👍"
 |---------|---------------|-----------------|
 | Running `agent serve` without a conversation ID or `--name` | The command requires one or the other. It will fail with neither | Pass a conversation ID to join existing, or `--name` to create new |
 | Manually polling `agent serve` and sending messages separately | Creates race conditions, you'll miss messages between polls | Write and run a bridge script that uses coprocess stdin/stdout |
-| Calling AI sub-session without context | Sub-session needs identity and behavioral rules to participate well | Use Pi (context loaded from workspace automatically) or prepend context for other backends |
+| Calling AI sub-session without context | Sub-session needs identity and behavioral rules to participate well | Deliver the `SYSTEM_MSG` from the bridge script on the first call (Pi loads workspace context automatically) |
 | Running bridge inline or in shared shell | Output from other commands (npm install, etc.) leaks into coprocess FDs and gets sent as chat messages | Write bridge to a file, run as separate background process |
 | Using markdown in messages | Convos does not render markdown. Users see raw `**asterisks**` and `[brackets](url)` | Write plain text naturally |
 | Sending via CLI while in agent mode | Agent serve owns the conversation stream. CLI sends create race conditions | Use stdin commands (`{"type":"send",...}`) in agent mode |
