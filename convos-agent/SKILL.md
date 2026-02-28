@@ -222,12 +222,12 @@ get sent as chat messages (e.g., npm install output appearing in the conversatio
 
 ### Bridge Script
 
-This bridge uses `openclaw agent` for reply generation. The Pi agent runtime
+This bridge uses `openclaw agent` for reply generation. The OpenClaw runtime
 gives the sub-session full tool access (read, exec, edit, write) and retains
 conversation history via `--session-id`.
 
-**OpenClaw (Pi runtime):** The agent also has context from its workspace
-bootstrap files (AGENTS.md, SOUL.md). No extra priming needed.
+**OpenClaw:** The agent also has context from its workspace bootstrap files
+(AGENTS.md, SOUL.md). No extra priming needed.
 
 **Other backends:** Replace the two `openclaw agent` calls in the `ready` and
 `message` handlers with your AI backend. If session-based, deliver the
@@ -499,7 +499,7 @@ convos conversation send-reaction "$CONV_ID" <message-id> remove "👍"
 |---------|---------------|-----------------|
 | Running `agent serve` without a conversation ID or `--name` | The command requires one or the other. It will fail with neither | Pass a conversation ID to join existing, or `--name` to create new |
 | Manually polling `agent serve` and sending messages separately | Creates race conditions, you'll miss messages between polls | Write and run a bridge script that uses coprocess stdin/stdout |
-| Calling AI sub-session without context | Sub-session needs identity and behavioral rules to participate well | Deliver the `SYSTEM_MSG` from the bridge script on the first call (Pi loads workspace context automatically) |
+| Calling AI sub-session without context | Sub-session needs identity and behavioral rules to participate well | Deliver the `SYSTEM_MSG` from the bridge script on the first call (OpenClaw loads workspace context automatically) |
 | Running bridge inline or in shared shell | Output from other commands (npm install, etc.) leaks into coprocess FDs and gets sent as chat messages | Write bridge to a file, run as separate background process |
 | Using markdown in messages | Convos does not render markdown. Users see raw `**asterisks**` and `[brackets](url)` | Write plain text naturally |
 | Sending via CLI while in agent mode | Agent serve owns the conversation stream. CLI sends create race conditions | Use stdin commands (`{"type":"send",...}`) in agent mode |
