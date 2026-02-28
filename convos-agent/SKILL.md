@@ -248,12 +248,20 @@ CONV_ID="${1:?Usage: $0 <conversation-id>}"
 SESSION_ID="convos-${CONV_ID}"
 MY_INBOX=""
 
+# Prevent duplicate bridges for the same conversation
+LOCK_FILE="/tmp/convos-bridge-${CONV_ID}.lock"
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+  echo "Bridge already running for $CONV_ID (lock: $LOCK_FILE)" >&2
+  exit 1
+fi
+
 # Named pipes — more stable than coprocess FDs
 FIFO_DIR=$(mktemp -d)
 FIFO_IN="$FIFO_DIR/in"
 FIFO_OUT="$FIFO_DIR/out"
 mkfifo "$FIFO_IN" "$FIFO_OUT"
-trap 'rm -rf "$FIFO_DIR"' EXIT
+trap 'rm -rf "$FIFO_DIR" "$LOCK_FILE"' EXIT
 
 # Start agent serve with named pipes
 convos agent serve "$CONV_ID" --profile-name "OpenClaw Agent" \
@@ -518,6 +526,7 @@ convos conversation send-reaction "$CONV_ID" <message-id> remove "👍"
 | Referencing inbox IDs in chat | People don't know or care about `0x...` hex strings | Fetch profiles and use display names |
 | Announcing tool usage | "Let me check the message history..." breaks immersion | Just do it silently and respond naturally |
 | Responding to every message | Agents that talk too much get muted | Only speak when it adds something. React instead of replying when possible |
+| Launching the bridge twice for the same conversation | Two bridges split the event stream randomly — messages get swallowed | The bridge template uses `flock` to prevent this. Always check for an existing process before launching |
 
 ## Troubleshooting
 
