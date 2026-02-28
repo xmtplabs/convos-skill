@@ -339,7 +339,7 @@ convos conversation messages "$CONV_ID" --json --sync --limit 20
 convos conversation update-profile "$CONV_ID" --name "Name"
 convos conversation info "$CONV_ID" --json
 
-Before your first message, silently check who's in the room:
+Right now, silently check who's in the room:
 convos conversation profiles "$CONV_ID" --json
 Then introduce yourself based on your IDENTITY.md. If any members match
 someone from your USER.md, acknowledge that you know them.
