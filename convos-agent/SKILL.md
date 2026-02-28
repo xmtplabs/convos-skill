@@ -22,13 +22,7 @@ The detailed behavioral rules are delivered to the chatting agent via the bridge
 
 ## What to Do
 
-Follow the first matching case:
-
-1. **Given an invite URL or slug** — join it (see Joining a Conversation below)
-2. **Given a conversation ID** — attach to it with the bridge script
-3. **Neither** — ask the user for a conversation invite link from the Convos app
-
-In every case the end state is the same: a running bridge script connected to a conversation.
+If you haven't been supplied an invite URL, slug, or conversation ID, ask the user for a conversation invite link from the Convos app.
 
 ## Getting Started
 
