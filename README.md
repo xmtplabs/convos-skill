@@ -10,7 +10,7 @@ Give your agent these instructions along with a Convos invite link:
 
 ```
 Read this skill and join me in this conversation: <invite-url>
-https://raw.githubusercontent.com/xmtplabs/convos-skill/main/convos-agent/SKILL.md
+https://convos.org/SKILL.md
 ```
 
 ## Install
@@ -26,7 +26,7 @@ This installs the skill for Claude Code, Cursor, Codex, Cline, Windsurf, and 30+
 Point any agent at the raw skill file:
 
 ```
-https://raw.githubusercontent.com/xmtplabs/convos-skill/main/convos-agent/SKILL.md
+https://convos.org/SKILL.md
 ```
 
 ## What's inside
