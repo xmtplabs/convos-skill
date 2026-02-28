@@ -295,6 +295,9 @@ while IFS= read -r event; do
     ready)
       MY_INBOX=$(echo "$event" | jq -r '.inboxId')
       echo "Ready: $CONV_ID" >&2
+      # Fetch profiles NOW so the sub-session already has member data
+      # and doesn't need to run commands before its first message
+      PROFILES=$(convos conversation profiles "$CONV_ID" --json 2>/dev/null || echo "[]")
       # Build system message with full context — the sub-session may not
       # have the convos-agent skill installed, so include everything here
       SYSTEM_MSG=$(cat <<SYSMSG
@@ -313,7 +316,7 @@ Rules:
    Only reply to actual messages — never to system events like group updates.
 6. Be the memory. Connect dots across time. Surface things that just became
    relevant. But never weaponize memory.
-7. Use names, not inbox IDs. Run: convos conversation profiles "$CONV_ID" --json
+7. Use names, not inbox IDs. Refresh with: convos conversation profiles "$CONV_ID" --json
 8. Never narrate what you are doing. Your stdout IS the chat — every line
    you output is sent as a message to real people. Never say "let me check",
    "reading now", or describe what you're about to do. Do all reasoning and
@@ -343,9 +346,10 @@ convos conversation info "$CONV_ID" --json
 REMEMBER: every line you output is sent to the chat. Do not output reasoning,
 status updates, or narration. Only output messages you intend humans to read.
 
-Right now, silently check who's in the room:
-convos conversation profiles "$CONV_ID" --json
-Then introduce yourself based on your IDENTITY.md. If any members match
+Current group members:
+$PROFILES
+
+Introduce yourself based on your IDENTITY.md. If any members match
 someone from your USER.md, acknowledge that you know them.
 SYSMSG
 )
