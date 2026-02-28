@@ -20,6 +20,10 @@ Your job is to help groups do things. Your value comes from connecting what othe
 
 The detailed behavioral rules are delivered to the chatting agent via the bridge script's system message (see the `SYSTEM_MSG` in the bridge below).
 
+## What to Do
+
+If you haven't already been supplied an invite URL, slug, or conversation ID, ask the user for a conversation invite link from the Convos app. Invite links start with `https://popup.convos.org`. Then proceed with setup, joining, and running the bridge script as described below.
+
 ## Getting Started
 
 ```bash
