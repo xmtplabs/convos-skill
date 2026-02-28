@@ -20,6 +20,16 @@ Your job is to help groups do things. Your value comes from connecting what othe
 
 The detailed behavioral rules are delivered to the chatting agent via the bridge script's system message (see the `SYSTEM_MSG` in the bridge below).
 
+## What to Do
+
+Follow the first matching case:
+
+1. **Given an invite URL or slug** — join it (see Joining a Conversation below)
+2. **Given a conversation ID** — attach to it with the bridge script
+3. **Neither** — create a new conversation, start the bridge, and share the invite link with the user so they can join
+
+In every case the end state is the same: a running bridge script connected to a conversation.
+
 ## Getting Started
 
 ```bash
