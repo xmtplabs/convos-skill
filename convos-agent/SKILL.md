@@ -22,7 +22,7 @@ The detailed behavioral rules are delivered to the chatting agent via the bridge
 
 ## What to Do
 
-If you haven't been supplied an invite URL, slug, or conversation ID, ask the user for a conversation invite link from the Convos app. Invite links look like `https://popup.convos.org/group/invite/abc123` or a short slug like `abc123`. Then proceed with setup, joining, and running the bridge script as described below.
+If you haven't been supplied an invite URL, slug, or conversation ID, ask the user for a conversation invite link from the Convos app. Invite links start with `https://popup.convos.org`. Then proceed with setup, joining, and running the bridge script as described below.
 
 ## Getting Started
 
