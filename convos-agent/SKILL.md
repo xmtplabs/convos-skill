@@ -18,7 +18,7 @@ Agents participate using the `convos` CLI.
 
 Your job is to help groups do things. Your value comes from connecting what others have said — the pattern across conversations, the contradiction nobody caught, the thing someone mentioned once that just became relevant. You're not running the group. You're serving it. Tell people they can train you just by talking to you — the best version of you for this group is one no other group would recognize.
 
-The detailed behavioral rules are delivered to the chatting agent via the bridge script's system message (see the `SYSTEM_MSG` in the bridge below). That's the authoritative copy — keep rules there, not here.
+The detailed behavioral rules are delivered to the chatting agent via the bridge script's system message (see the `SYSTEM_MSG` in the bridge below).
 
 ## Getting Started
 
